@@ -1,13 +1,14 @@
 from dataclasses import dataclass
-from typing import List, Optional, Callable
 
 from cavityWidget import CavityWidget
 from epics import PV
-from pydm import Display
-from scLinac import Cryomodule, Linac, LINACS, CM_LINAC_MAP, Cavity
-from pydm.widgets.template_repeater import PyDMTemplateRepeater
 from frontEnd_constants import shapeParameterDict
 from functools import partial
+from pydm import Display
+from pydm.widgets.template_repeater import PyDMTemplateRepeater
+from typing import Callable, List, Optional
+
+from scLinac import Cavity, Cryomodule, LINACS, Linac
 
 TRANSFER_LINE_ALARM_LIMIT = 8E-5
 
@@ -37,10 +38,6 @@ class AlarmPV:
         self.pv.add_callback(partial(alarmCallback, self.alarmLimit,
                                      self.updateFunction))
 
-    # @property
-    # def isAlarming(self):
-    #     return self.pv.value is None or self.pv.value >= self.alarmLimit
-
 
 def alarmCallback(alarmLimit, updateFunction, value, **kw):
     isAlarming = value is None or value >= alarmLimit
@@ -57,10 +54,6 @@ class AlarmLinac(Linac):
         beamLineVacuumPVString = "VGXX:{linac}:0202:COMBO_P".format(linac=linacName)
         self.beamLineVacuumPV = AlarmPV(pv=PV(beamLineVacuumPVString),
                                         alarmLimit=1.5E-8, updateFunction=self.update)
-
-    # @property
-    # def isAlarming(self):
-    #     return self.beamLineVacuumPV.isAlarming
 
     def update(self, isAlarming):
         if isAlarming:
@@ -93,12 +86,6 @@ class AlarmCryomodule(Cryomodule):
                                        alarmLimit=2,
                                        updateFunction=self.update)
 
-    # @property
-    # def isAlarming(self):
-    #     return (self.lineBPressurePV.isAlarming
-    #             or self.insulatingCouplerVacuumPV.isAlarming
-    #             or self.couplerVacuumPV.isAlarming)
-
     def update(self, isAlarming):
         if isAlarming:
             updateWidget(self.widget, 2)
@@ -113,24 +100,30 @@ for idx, (name, cryomoduleList) in enumerate(LINACS):
 
 
 class CryoAlarmDisplay(Display):
-    # def ui_filename(self):
-    #     return "alarmDisplay.ui"
 
     def __init__(self, parent=None, args=None, ui_filename="alarmDisplay.ui"):
         super(CryoAlarmDisplay, self).__init__(parent=parent, args=args,
                                                ui_filename=ui_filename)
 
-        # self.transferLineVacuum1 = AlarmPV(pv=PV("CPT:FC01:950:VG:PRESS"),
-        #                                    alarmLimit=TRANSFER_LINE_ALARM_LIMIT)
-        #
-        # self.transferLineVacuum2 = AlarmPV(pv=PV("CPT:FC02:953:VG:PRESS"),
-        #                                    alarmLimit=TRANSFER_LINE_ALARM_LIMIT)
-        #
-        # self.transferLineVacuum3 = AlarmPV(pv=PV("CPT:FC03:954:VG:PRESS"),
-        #                                    alarmLimit=TRANSFER_LINE_ALARM_LIMIT)
-        #
-        # self.transferLineVacuum4 = AlarmPV(pv=PV("CPT:FC04:957:VG:PRESS"),
-        #                                    alarmLimit=TRANSFER_LINE_ALARM_LIMIT)
+        self.transferLineVacuum1 = AlarmPV(pv=PV("CPT:FC01:950:VG:PRESS"),
+                                           alarmLimit=TRANSFER_LINE_ALARM_LIMIT,
+                                           updateFunction=partial(self.updateVG,
+                                                                  self.ui.vg1))
+
+        self.transferLineVacuum2 = AlarmPV(pv=PV("CPT:FC02:953:VG:PRESS"),
+                                           alarmLimit=TRANSFER_LINE_ALARM_LIMIT,
+                                           updateFunction=partial(self.updateVG,
+                                                                  self.ui.vg2))
+
+        self.transferLineVacuum3 = AlarmPV(pv=PV("CPT:FC03:954:VG:PRESS"),
+                                           alarmLimit=TRANSFER_LINE_ALARM_LIMIT,
+                                           updateFunction=partial(self.updateVG,
+                                                                  self.ui.vg3))
+
+        self.transferLineVacuum4 = AlarmPV(pv=PV("CPT:FC04:957:VG:PRESS"),
+                                           alarmLimit=TRANSFER_LINE_ALARM_LIMIT,
+                                           updateFunction=partial(self.updateVG,
+                                                                  self.ui.vg4))
 
         templateRepeaters: List[PyDMTemplateRepeater] = [self.ui.L0B,
                                                          self.ui.L1B,
@@ -148,3 +141,11 @@ class CryoAlarmDisplay(Display):
                 print([linacObject.name, linacObject.widget])
                 cryomoduleObject: AlarmCryomodule = linacObject.cryomodules[cryomoduleName]
                 cryomoduleObject.widget = cryomoduleDisplayObj
+
+    @staticmethod
+    def updateVG(widget, isAlarming):
+        if isAlarming:
+            updateWidget(widget, 2)
+
+        else:
+            updateWidget(widget, 0)
